@@ -1,6 +1,6 @@
 /*
 
-Copyright (c) 2005-2023, University of Oxford.
+Copyright (c) 2005-2026, University of Oxford.
 All rights reserved.
 
 University of Oxford means the Chancellor, Masters and Scholars of the
@@ -33,22 +33,41 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-#ifndef HELLO_HPP_
-#define HELLO_HPP_
+#ifndef NONCYCLINGCELLPROPERTY_HPP_
+#define NONCYCLINGCELLPROPERTY_HPP_
 
-#include <string>
+#include "AbstractCellProperty.hpp"
+#include "ChasteSerialization.hpp"
+#include <boost/serialization/base_object.hpp>
 
-class Hello
+/**
+ * Cell property marking a cell as non-cycling (post-mitotic).
+ *
+ * Cells bearing this property:
+ *  - never divide: BernoulliTrialWithContactInhibitionCellCycleModel returns
+ *    false from ReadyToDivide() immediately for non-cycling cells.
+ *  - have a frozen circadian rhythm: CircadianRhythmModifier initialises their
+ *    circadian_cycle_* CellData items at t=0 but does not advance them on
+ *    subsequent time steps, so their circadian angle remains constant.
+ */
+class NonCyclingCellProperty : public AbstractCellProperty
 {
 private:
-    std::string mMessage;
+    /** Needed for serialization. */
+    friend class boost::serialization::access;
+
+    template<class Archive>
+    void serialize(Archive& archive, const unsigned int version)
+    {
+        archive & boost::serialization::base_object<AbstractCellProperty>(*this);
+    }
 
 public:
-    Hello(const std::string& rMessage);
+    /** Default constructor. */
+    NonCyclingCellProperty() : AbstractCellProperty() {}
 
-    std::string GetMessage();
-
-    void Complain(const std::string& rComplaint);
+    /** Destructor. */
+    virtual ~NonCyclingCellProperty() {}
 };
 
-#endif /*HELLO_HPP_*/
+#endif // NONCYCLINGCELLPROPERTY_HPP_
