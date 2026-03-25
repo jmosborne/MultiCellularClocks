@@ -39,13 +39,16 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <cmath>
 
 #include "NonCyclingCellProperty.hpp"
+#include "OscillatingCellMutationState.hpp"
 #include "SimulationTime.hpp"
+#include "WildTypeCellMutationState.hpp"
 
 template<unsigned DIM>
 CircadianRhythmModifier<DIM>::CircadianRhythmModifier()
     : AbstractCellBasedSimulationModifier<DIM, DIM>(),
       mCircadianPeriod(24.0),
-      mPhaseShift(0.0)
+    mPhaseShift(0.0),
+    mMutationThreshold(0.0)
 {
 }
 
@@ -80,6 +83,18 @@ void CircadianRhythmModifier<DIM>::SetPhaseShift(double phaseShift)
 }
 
 template<unsigned DIM>
+double CircadianRhythmModifier<DIM>::GetMutationThreshold() const
+{
+    return mMutationThreshold;
+}
+
+template<unsigned DIM>
+void CircadianRhythmModifier<DIM>::SetMutationThreshold(double threshold)
+{
+    mMutationThreshold = threshold;
+}
+
+template<unsigned DIM>
 void CircadianRhythmModifier<DIM>::UpdateAtEndOfTimeStep(AbstractCellPopulation<DIM, DIM>& rCellPopulation)
 {
     UpdateCellData(rCellPopulation);
@@ -96,22 +111,31 @@ template<unsigned DIM>
 void CircadianRhythmModifier<DIM>::UpdateCellData(AbstractCellPopulation<DIM, DIM>& rCellPopulation)
 {
     const double time = SimulationTime::Instance()->GetTime();
-    const double circadian_cycle = std::sin(2.0 * 3.14159265358979323846 * time / 24.0);
+    const double circadian_cycle = std::sin(2.0 * 3.14159265358979323846 * time / mCircadianPeriod + mPhaseShift);
 
     for (typename AbstractCellPopulation<DIM, DIM>::Iterator pCell = rCellPopulation.Begin();
          pCell != rCellPopulation.End();
          ++pCell)
     {
-        // Non-cycling cells have a frozen circadian rhythm: their CellData
-        // items are written once on the first call (SetupSolve at t=0) and
-        // are not updated on subsequent time steps.
-        if (pCell->template HasCellProperty<NonCyclingCellProperty>()
-            && pCell->GetCellData()->HasItem("circadian_cycle"))
-        {
-            continue;
-        }
+        // Switch mutation state according to thresholded circadian cycle.
+        boost::shared_ptr<AbstractCellProperty> p_new_mutation_state;
+        p_new_mutation_state = CellPropertyRegistry::Instance()->Get<WildTypeCellMutationState>();
 
-        pCell->GetCellData()->SetItem("circadian_cycle", circadian_cycle);
+        // Non-cycling cells have a frozen circadian rhythm
+        if (pCell->template HasCellProperty<NonCyclingCellProperty>())
+        {
+            pCell->GetCellData()->SetItem("circadian_cycle", 2.0);
+        }
+        else
+        {
+            pCell->GetCellData()->SetItem("circadian_cycle", circadian_cycle);
+   
+            if (circadian_cycle > mMutationThreshold)
+            {
+                p_new_mutation_state = CellPropertyRegistry::Instance()->Get<OscillatingCellMutationState>();
+            }
+        }
+        pCell->SetMutationState(p_new_mutation_state);
     }
 }
 
@@ -120,6 +144,7 @@ void CircadianRhythmModifier<DIM>::OutputSimulationModifierParameters(out_stream
 {
     *rParamsFile << "\t\t\t<CircadianPeriod>" << mCircadianPeriod << "</CircadianPeriod>\n";
     *rParamsFile << "\t\t\t<PhaseShift>" << mPhaseShift << "</PhaseShift>\n";
+    *rParamsFile << "\t\t\t<MutationThreshold>" << mMutationThreshold << "</MutationThreshold>\n";
 
     AbstractCellBasedSimulationModifier<DIM, DIM>::OutputSimulationModifierParameters(rParamsFile);
 }

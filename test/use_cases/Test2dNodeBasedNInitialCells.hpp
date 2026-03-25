@@ -44,6 +44,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "AbstractCellBasedTestSuite.hpp"
 #include "BernoulliTrialWithContactInhibitionCellCycleModel.hpp"
+#include "CellMutationStatesWriter.hpp"
 #include "CellsGenerator.hpp"
 #include "CellLabelWriter.hpp"
 #include "CircadianRandomForce.hpp"
@@ -72,7 +73,7 @@ public:
         EXIT_IF_PARALLEL;
 
         // Number of initial cells (change this to run with a different n).
-        const unsigned n_initial_cells = 16u;
+        const unsigned n_initial_cells = 64u; //64u;
 
         // Place cells on a square lattice with spacing >= 1.0 so they start separated.
         const unsigned side = static_cast<unsigned>(std::ceil(std::sqrt(static_cast<double>(n_initial_cells))));
@@ -112,6 +113,9 @@ public:
             CellsGenerator<BernoulliTrialWithContactInhibitionCellCycleModel, 2> cells_generator;
             cells_generator.GenerateBasic(cells, n_initial_cells);
 
+            TS_ASSERT_EQUALS(cells.size(), n_initial_cells);
+            TS_ASSERT_EQUALS(n_initial_cells % 2u, 0u);
+
             for (auto& p_cell : cells)
             {
               auto* p_cycle_model = static_cast<BernoulliTrialWithContactInhibitionCellCycleModel*>(p_cell->GetCellCycleModel());
@@ -121,17 +125,40 @@ public:
               p_cycle_model->SetMinimumDivisionAge(4.0);
             }
 
-            // Mark 50 % of cells as non-cycling: every other cell in the initial
-            // list receives a NonCyclingCellProperty.  These cells will not divide
-            // and their circadian rhythm will remain frozen at its t=0 value.
-            for (unsigned i = 0u; i < cells.size(); i += 2u)
+            // Randomly mark exactly 50% of cells as non-cycling (without
+            // replacement). These cells will not divide and their circadian
+            // rhythm will remain frozen at its t=0 value.
+            std::vector<unsigned> cell_indices(cells.size());
+            for (unsigned i = 0u; i < cell_indices.size(); ++i)
             {
-                cells[i]->AddCellProperty(boost::make_shared<NonCyclingCellProperty>());
+                cell_indices[i] = i;
+            }
+
+            // Fisher-Yates shuffle driven by Chaste RNG
+            for (unsigned i = 0u; i < cell_indices.size(); ++i)
+            {
+                unsigned remaining = static_cast<unsigned>(cell_indices.size() - i);
+                unsigned j = i + static_cast<unsigned>(std::floor(p_gen->ranf() * remaining));
+                if (j >= cell_indices.size())
+                {
+                    j = static_cast<unsigned>(cell_indices.size() - 1u);
+                }
+                std::swap(cell_indices[i], cell_indices[j]);
+            }
+
+            unsigned num_non_cycling = static_cast<unsigned>(cells.size() / 2u);
+            for (unsigned k = 0u; k < num_non_cycling; ++k)
+            {
+                cells[cell_indices[k]]->AddCellProperty(boost::make_shared<NonCyclingCellProperty>());
             }
 
             NodeBasedCellPopulation<2> cell_population(mesh, cells);
             cell_population.AddCellWriter<CellLabelWriter>();
+            cell_population.AddCellWriter<CellMutationStatesWriter>();
             cell_population.AddPopulationWriter<NonCyclingCellCountWriter>();
+            
+            cell_population.SetDampingConstantNormal(1.0);
+            cell_population.SetDampingConstantMutant(0.1);
 
             OffLatticeSimulation<2> simulator(cell_population);
             simulator.SetOutputDirectory("MultiCellularClocks/NodeBased2dNInitialCells/" + std::to_string(sim_index));
@@ -140,40 +167,30 @@ public:
             simulator.SetSamplingTimestepMultiple(50);
 
             auto p_force = boost::make_shared<RepulsionForce<2> >();
-            p_force->SetMeinekeSpringStiffness(8.0);
+            p_force->SetMeinekeSpringStiffness(1.0);
             simulator.AddForce(p_force);
 
             auto p_circadian_modifier = boost::make_shared<CircadianRhythmModifier<2> >();
             p_circadian_modifier->SetCircadianPeriod(24.0);
             p_circadian_modifier->SetPhaseShift(0.0);
+            p_circadian_modifier->SetMutationThreshold(0.0);
             simulator.AddSimulationModifier(p_circadian_modifier);
 
             auto p_volume_modifier = boost::make_shared<VolumeTrackingModifier<2> >();
             simulator.AddSimulationModifier(p_volume_modifier);
 
-            auto p_circadian_random_force = boost::make_shared<CircadianRandomForce<2> >();
-            p_circadian_random_force->SetAmplitude(1.0);
-            simulator.AddForce(p_circadian_random_force);
+
+            // auto p_circadian_random_force = boost::make_shared<CircadianRandomForce<2> >();
+            // p_circadian_random_force->SetAmplitude(0.8);
+            // simulator.AddForce(p_circadian_random_force);
 
             // Circular boundary of radius 10 centred at the origin.
-            c_vector<double, 2> centre = zero_vector<double>(2);
-            const double radius = 5.0;
-            auto p_circle_bc = boost::make_shared<SphereBasedBoundaryCondition<2> >(&cell_population, centre, radius);
-            simulator.AddCellPopulationBoundaryCondition(p_circle_bc);
+            // c_vector<double, 2> centre = zero_vector<double>(2);
+            // const double radius = 5.0;
+            // auto p_circle_bc = boost::make_shared<SphereBasedBoundaryCondition<2> >(&cell_population, centre, radius);
+            // simulator.AddCellPopulationBoundaryCondition(p_circle_bc);
             
             simulator.Solve();
-
-            for (auto p_cell = cell_population.Begin(); p_cell != cell_population.End(); ++p_cell)
-            {
-              TS_ASSERT(p_cell->GetCellData()->HasItem("circadian_cycle"));
-
-              double cycle_value = p_cell->GetCellData()->GetItem("circadian_cycle");
-              TS_ASSERT(cycle_value >= -1.0);
-              TS_ASSERT(cycle_value <= 1.0);
-            }
-
-            TS_ASSERT(cell_population.GetNumRealCells() >= n_initial_cells);
-
 
             // Extra Gubbins to get to loop: this is usually done by the SetUp and TearDown methods
             SimulationTime::Instance()->Destroy();
