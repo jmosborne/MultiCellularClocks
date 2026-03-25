@@ -38,6 +38,7 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <cmath>
 #include <memory>
+#include <string>
 
 #include <cxxtest/TestSuite.h>
 
@@ -71,99 +72,114 @@ public:
         EXIT_IF_PARALLEL;
 
         // Number of initial cells (change this to run with a different n).
-        const unsigned n_initial_cells = 25u;
+        const unsigned n_initial_cells = 16u;
 
         // Place cells on a square lattice with spacing >= 1.0 so they start separated.
         const unsigned side = static_cast<unsigned>(std::ceil(std::sqrt(static_cast<double>(n_initial_cells))));
         const double spacing = 1.0;
 
-        std::vector<std::unique_ptr<Node<2> > > node_storage;
-        node_storage.reserve(n_initial_cells);
-
-        std::vector<Node<2>*> nodes;
-        nodes.reserve(n_initial_cells);
-
-        for (unsigned i = 0u; i < n_initial_cells; ++i)
+        for (unsigned sim_index = 0u; sim_index < 10u; ++sim_index)
         {
-            const unsigned row = i / side;
-            const unsigned col = i % side;
-            std::vector<double> location(2);
-            location[0] = spacing * (static_cast<double>(col) - 0.5 * static_cast<double>(side - 1u));
-            location[1] = spacing * (static_cast<double>(row) - 0.5 * static_cast<double>(side - 1u));
+            std::cout << " Run number " << sim_index << "... \n" << std::flush;
 
-            node_storage.emplace_back(std::make_unique<Node<2> >(i, location, false));
-            nodes.push_back(node_storage.back().get());
+            // Reseed the random number generator
+            RandomNumberGenerator* p_gen = RandomNumberGenerator::Instance();
+            p_gen->Reseed(sim_index);
+
+            std::vector<std::unique_ptr<Node<2> > > node_storage;
+            node_storage.reserve(n_initial_cells);
+
+            std::vector<Node<2>*> nodes;
+            nodes.reserve(n_initial_cells);
+
+            for (unsigned i = 0u; i < n_initial_cells; ++i)
+            {
+                const unsigned row = i / side;
+                const unsigned col = i % side;
+                std::vector<double> location(2);
+                location[0] = spacing * (static_cast<double>(col) - 0.5 * static_cast<double>(side - 1u));
+                location[1] = spacing * (static_cast<double>(row) - 0.5 * static_cast<double>(side - 1u));
+
+                node_storage.emplace_back(std::make_unique<Node<2> >(i, location, false));
+                nodes.push_back(node_storage.back().get());
+            }
+
+            NodesOnlyMesh<2> mesh;
+            const double max_interaction_radius = 1.5;
+            mesh.ConstructNodesWithoutMesh(nodes, max_interaction_radius);
+
+            std::vector<CellPtr> cells;
+            CellsGenerator<BernoulliTrialWithContactInhibitionCellCycleModel, 2> cells_generator;
+            cells_generator.GenerateBasic(cells, n_initial_cells);
+
+            for (auto& p_cell : cells)
+            {
+              auto* p_cycle_model = static_cast<BernoulliTrialWithContactInhibitionCellCycleModel*>(p_cell->GetCellCycleModel());
+              p_cycle_model->SetQuiescentVolumeFraction(0.75);
+              p_cycle_model->SetEquilibriumVolume(1.0);
+              p_cycle_model->SetDivisionProbability(0.02);
+              p_cycle_model->SetMinimumDivisionAge(4.0);
+            }
+
+            // Mark 50 % of cells as non-cycling: every other cell in the initial
+            // list receives a NonCyclingCellProperty.  These cells will not divide
+            // and their circadian rhythm will remain frozen at its t=0 value.
+            for (unsigned i = 0u; i < cells.size(); i += 2u)
+            {
+                cells[i]->AddCellProperty(boost::make_shared<NonCyclingCellProperty>());
+            }
+
+            NodeBasedCellPopulation<2> cell_population(mesh, cells);
+            cell_population.AddCellWriter<CellLabelWriter>();
+            cell_population.AddPopulationWriter<NonCyclingCellCountWriter>();
+
+            OffLatticeSimulation<2> simulator(cell_population);
+            simulator.SetOutputDirectory("MultiCellularClocks/NodeBased2dNInitialCells/" + std::to_string(sim_index));
+            simulator.SetEndTime(10*24.0);
+            simulator.SetDt(0.01);
+            simulator.SetSamplingTimestepMultiple(50);
+
+            auto p_force = boost::make_shared<RepulsionForce<2> >();
+            p_force->SetMeinekeSpringStiffness(8.0);
+            simulator.AddForce(p_force);
+
+            auto p_circadian_modifier = boost::make_shared<CircadianRhythmModifier<2> >();
+            p_circadian_modifier->SetCircadianPeriod(24.0);
+            p_circadian_modifier->SetPhaseShift(0.0);
+            simulator.AddSimulationModifier(p_circadian_modifier);
+
+            auto p_volume_modifier = boost::make_shared<VolumeTrackingModifier<2> >();
+            simulator.AddSimulationModifier(p_volume_modifier);
+
+            auto p_circadian_random_force = boost::make_shared<CircadianRandomForce<2> >();
+            p_circadian_random_force->SetAmplitude(1.0);
+            simulator.AddForce(p_circadian_random_force);
+
+            // Circular boundary of radius 10 centred at the origin.
+            c_vector<double, 2> centre = zero_vector<double>(2);
+            const double radius = 5.0;
+            auto p_circle_bc = boost::make_shared<SphereBasedBoundaryCondition<2> >(&cell_population, centre, radius);
+            simulator.AddCellPopulationBoundaryCondition(p_circle_bc);
+            
+            simulator.Solve();
+
+            for (auto p_cell = cell_population.Begin(); p_cell != cell_population.End(); ++p_cell)
+            {
+              TS_ASSERT(p_cell->GetCellData()->HasItem("circadian_cycle"));
+
+              double cycle_value = p_cell->GetCellData()->GetItem("circadian_cycle");
+              TS_ASSERT(cycle_value >= -1.0);
+              TS_ASSERT(cycle_value <= 1.0);
+            }
+
+            TS_ASSERT(cell_population.GetNumRealCells() >= n_initial_cells);
+
+
+            // Extra Gubbins to get to loop: this is usually done by the SetUp and TearDown methods
+            SimulationTime::Instance()->Destroy();
+            SimulationTime::Instance()->SetStartTime(0.0);
+
         }
-
-        NodesOnlyMesh<2> mesh;
-        const double max_interaction_radius = 1.5;
-        mesh.ConstructNodesWithoutMesh(nodes, max_interaction_radius);
-
-        std::vector<CellPtr> cells;
-        CellsGenerator<BernoulliTrialWithContactInhibitionCellCycleModel, 2> cells_generator;
-        cells_generator.GenerateBasic(cells, n_initial_cells);
-
-        for (auto& p_cell : cells)
-        {
-          auto* p_cycle_model = static_cast<BernoulliTrialWithContactInhibitionCellCycleModel*>(p_cell->GetCellCycleModel());
-          p_cycle_model->SetQuiescentVolumeFraction(0.75);
-          p_cycle_model->SetEquilibriumVolume(1.0);
-          p_cycle_model->SetDivisionProbability(0.02);
-          p_cycle_model->SetMinimumDivisionAge(4.0);
-        }
-
-        // Mark 50 % of cells as non-cycling: every other cell in the initial
-        // list receives a NonCyclingCellProperty.  These cells will not divide
-        // and their circadian rhythm will remain frozen at its t=0 value.
-        for (unsigned i = 0u; i < cells.size(); i += 2u)
-        {
-            cells[i]->AddCellProperty(boost::make_shared<NonCyclingCellProperty>());
-        }
-
-        NodeBasedCellPopulation<2> cell_population(mesh, cells);
-          cell_population.AddCellWriter<CellLabelWriter>();
-          cell_population.AddPopulationWriter<NonCyclingCellCountWriter>();
-
-        OffLatticeSimulation<2> simulator(cell_population);
-        simulator.SetOutputDirectory("MultiCellularClocks/NodeBased2dNInitialCells");
-        simulator.SetEndTime(10*24.0);
-        simulator.SetDt(0.01);
-        simulator.SetSamplingTimestepMultiple(50);
-
-        auto p_force = boost::make_shared<RepulsionForce<2> >();
-        p_force->SetMeinekeSpringStiffness(8.0);
-        simulator.AddForce(p_force);
-
-        auto p_circadian_modifier = boost::make_shared<CircadianRhythmModifier<2> >();
-        p_circadian_modifier->SetCircadianPeriod(24.0);
-        p_circadian_modifier->SetPhaseShift(0.0);
-        simulator.AddSimulationModifier(p_circadian_modifier);
-
-        auto p_volume_modifier = boost::make_shared<VolumeTrackingModifier<2> >();
-        simulator.AddSimulationModifier(p_volume_modifier);
-
-        auto p_circadian_random_force = boost::make_shared<CircadianRandomForce<2> >();
-        p_circadian_random_force->SetAmplitude(0.8);
-        simulator.AddForce(p_circadian_random_force);
-
-        // Circular boundary of radius 10 centred at the origin.
-        c_vector<double, 2> centre = zero_vector<double>(2);
-        const double radius = 10.0;
-        auto p_circle_bc = boost::make_shared<SphereBasedBoundaryCondition<2> >(&cell_population, centre, radius);
-        simulator.AddCellPopulationBoundaryCondition(p_circle_bc);
-        
-        simulator.Solve();
-
-        for (auto p_cell = cell_population.Begin(); p_cell != cell_population.End(); ++p_cell)
-        {
-          TS_ASSERT(p_cell->GetCellData()->HasItem("circadian_cycle"));
-
-          double cycle_value = p_cell->GetCellData()->GetItem("circadian_cycle");
-          TS_ASSERT(cycle_value >= -1.0);
-          TS_ASSERT(cycle_value <= 1.0);
-        }
-
-        TS_ASSERT(cell_population.GetNumRealCells() >= n_initial_cells);
     }
 };
 
