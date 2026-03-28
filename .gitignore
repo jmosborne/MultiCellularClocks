@@ -1,2 +1,8 @@
 build/
 
+docs/TestClocksCompetition.aux
+.gitignore
+docs/TestClocksCompetition.log
+docs/TestClocksCompetition.out
+docs/TestClocksCompetition.bbl
+.gitignore
