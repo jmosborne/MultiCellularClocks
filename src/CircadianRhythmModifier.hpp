@@ -46,6 +46,10 @@ OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * The following CellData item is updated every time step:
  *  - "circadian_cycle" = sin(2*pi*time/24)
+ *
+ * Also sets each cell mutation state according to a threshold:
+ *  - OscillatingCellMutationState if circadian_cycle > mMutationThreshold
+ *  - WildTypeCellMutationState otherwise
  */
 template<unsigned DIM>
 class CircadianRhythmModifier : public AbstractCellBasedSimulationModifier<DIM, DIM>
@@ -67,6 +71,7 @@ private:
         archive & boost::serialization::base_object<AbstractCellBasedSimulationModifier<DIM, DIM> >(*this);
         archive & mCircadianPeriod;
         archive & mPhaseShift;
+        archive & mMutationThreshold;
     }
 
     /** Circadian period in simulation time units (default: 24). */
@@ -74,6 +79,9 @@ private:
 
     /** Optional phase shift in simulation time units (default: 0). */
     double mPhaseShift;
+
+    /** Threshold on circadian_cycle for mutation-state switching (default: 0). */
+    double mMutationThreshold;
 
 public:
 
@@ -106,6 +114,18 @@ public:
      * @param phaseShift phase shift in time units
      */
     void SetPhaseShift(double phaseShift);
+
+    /**
+     * @return mutation threshold.
+     */
+    double GetMutationThreshold() const;
+
+    /**
+     * Set mutation threshold.
+     *
+     * @param threshold threshold on circadian_cycle
+     */
+    void SetMutationThreshold(double threshold);
 
     /**
      * Overridden UpdateAtEndOfTimeStep() method.
