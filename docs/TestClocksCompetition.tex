@@ -1,0 +1,278 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{hyperref}
+
+\title{Simulation Description: \texttt{TestClocksCompetition}}
+\author{MultiCellularClocks Project}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Mathematical model}
+This document summarizes the mathematical model used by
+\texttt{TestClocksCompetition}. The node-based mechanical framework follows the
+overdamped centre-based formulation implemented in Chaste \cite{mirams2013chaste},
+and the logarithmic repulsive interaction is consistent with the Meineke-style
+spring law in the overlap regime \cite{meineke2001}. 
+
+\subsection{State variables}
+Let \(N=16\) cells be indexed by \(i\in\{1,\dots,N\}\).
+Each cell has:
+\begin{itemize}
+  \item position \(\mathbf{x}_i(t)\in\mathbb{R}^2\),
+  \item radius \(r_i\),
+  \item drag coefficient \(\gamma_i(t)>0\),
+  \item circadian value \(c_i(t)\) stored in cell data.
+\end{itemize}
+
+For each run, cells are assigned to two phenotype sets:
+\begin{itemize}
+  \item \emph{non-cycling} set \(\mathcal{N}\),
+  \item \emph{cycling} set \(\mathcal{C}\),
+\end{itemize}
+with \(|\mathcal{N}|+|\mathcal{C}|=N\). The current experimental setup uses three
+group compositions:
+\begin{itemize}
+  \item All Non-Cycling: \(|\mathcal{N}|=N\), \(|\mathcal{C}|=0\),
+  \item All Cycling: \(|\mathcal{N}|=0\), \(|\mathcal{C}|=N\),
+  \item Half Non-Cycling / Half Cycling: \(|\mathcal{N}|=|\mathcal{C}|=N/2\), with
+  identity assigned by random shuffle at initialization.
+\end{itemize}
+
+\subsection{Neighbour interactions}
+For each interacting pair \((i,j)\), define
+\begin{align}
+\mathbf{d}_{ij} &= \mathbf{x}_j-\mathbf{x}_i, & d_{ij}&=\|\mathbf{d}_{ij}\|, & \hat{\mathbf{d}}_{ij}&=\frac{\mathbf{d}_{ij}}{d_{ij}},\\
+\ell_{ij} &= r_i+r_j, & \delta_{ij}&=d_{ij}-\ell_{ij}.
+\label{eq:pair_kinematics}
+\end{align}
+
+A pairwise force is applied only in overlap (repulsion) regime \(d_{ij}<\ell_{ij}\):
+\begin{equation}
+\mathbf{F}_{ij}=p\,\hat{\mathbf{d}}_{ij}\,\ell_{ij}\,\log\!\left(1+\frac{\delta_{ij}}{\ell_{ij}}\right),
+\label{eq:pair_force}
+\end{equation}
+where \(p>0\) is the \texttt{RepulsionParameter} (set to \(1.0\) in this test).
+Equation~\eqref{eq:pair_force} is evaluated using the geometric quantities from
+Eq.~\eqref{eq:pair_kinematics}.
+
+The cell-interaction force contribution is drag-weighted asymmetrically:
+\begin{align}
+\mathbf{f}_{i\leftarrow j} &= \frac{1}{\gamma_i}\mathbf{F}_{ij},\\
+\mathbf{f}_{j\leftarrow i} &= -\frac{1}{\gamma_j}\mathbf{F}_{ij}.
+\label{eq:drag_weighted_pair_forces}
+\end{align}
+This force-based centre model is discussed in detail in
+\cite{osborne2017comparing}.
+
+Thus higher drag reduces the applied mechanical contribution.
+
+\subsection{Circadian signal and drag law}
+A global circadian signal is defined by
+\begin{equation}
+c(t)=\sin\!\left(\frac{2\pi t}{T}+\phi\right),
+\qquad T=24,\;\phi=0.
+\label{eq:circadian_signal}
+\end{equation}
+This periodic form is the canonical phenomenological choice for circadian phase
+forcing \cite{takahashi2017}. 
+
+Phenotype-dependent rules are piecewise:
+\begin{itemize}
+  \item If \(i\in\mathcal{N}\):
+  \begin{equation}
+  c_i(t)=2.0,\qquad \gamma_i(t)=1.0.
+  \label{eq:noncycling_rule}
+  \end{equation}
+  \item If \(i\in\mathcal{C}\):
+  \begin{equation}
+  c_i(t)=c(t),
+  \label{eq:cycling_circadian}
+  \end{equation}
+  and with threshold \(\theta=0\):
+  \begin{equation}
+  \gamma_i(t)=
+  \begin{cases}
+    0.1, & c(t)>\theta,\\
+    10.0, & c(t)\le\theta.
+  \end{cases}
+  \label{eq:cycling_drag_rule}
+  \end{equation}
+\end{itemize}
+Hence Eq.~\eqref{eq:cycling_drag_rule} creates alternating high-mobility and
+low-mobility phases synchronized to Eq.~\eqref{eq:circadian_signal}.
+
+Therefore cycling cells alternate between low-drag and high-drag phases,
+while non-cycling cells keep constant drag. The three simulation groups differ
+only by composition \((|\mathcal{N}|,|\mathcal{C}|)\); all other mechanical and
+cell-cycle parameters are held fixed.
+
+\subsection{Equation of motion (overdamped node dynamics)}
+For each node \(i\), the net applied force is
+\begin{equation}
+\mathbf{F}^{\text{net}}_i(t)=\sum_{j\in\mathcal{N}(i)}\mathbf{f}_{i\leftarrow j},
+\label{eq:net_force}
+\end{equation}
+where \(\mathcal{N}(i)\) is the interaction-neighbour set from the node-based mesh.
+By construction, Eq.~\eqref{eq:net_force} aggregates pair terms from
+Eq.~\eqref{eq:drag_weighted_pair_forces}.
+
+In overdamped form, velocity is proportional to net force,
+\begin{equation}
+\dot{\mathbf{x}}_i(t) \propto \mathbf{F}^{\text{net}}_i(t),
+\label{eq:overdamped_update}
+\end{equation}
+and the simulation integrates with time step \(\Delta t=0.01\) to final time
+\(T_{\text{end}}=240\).
+
+\subsection{Initial and experimental conditions}
+\begin{itemize}
+  \item Initial positions: square lattice, spacing \(1.0\).
+  \item Interaction radius in neighbour search: \(1.5\).
+  \item Simulation groups: All Non-Cycling, All Cycling, and Half Non-Cycling / Half Cycling.
+  \item Replicates: 10 runs per group with seeds \(0,1,\dots,9\).
+  \item Cell-cycle model: Bernoulli trial with contact inhibition,
+  using
+  \(\texttt{QuiescentVolumeFraction}=0.75\),
+  \(\texttt{EquilibriumVolume}=1.0\),
+  \(\texttt{DivisionProbability}=0.02\),
+  \(\texttt{MinimumDivisionAge}=4.0\).
+\end{itemize}
+
+\section{Parameter summary}
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Quantity & Value \\
+\midrule
+Number of cells \(N\) & 16 \\
+Replicates & 10 \\
+Time step \(\Delta t\) & 0.01 \\
+Final time \(T_{\text{end}}\) & 240 \\
+Circadian period \(T\) & 24 \\
+Circadian phase \(\phi\) & 0 \\
+Threshold \(\theta\) & 0 \\
+Repulsion parameter \(p\) & 1.0 \\
+Cycling-cell drag (high circadian phase) & 0.1 \\
+Cycling-cell drag (low circadian phase) & 10.0 \\
+Non-cycling drag & 1.0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Interpretation}
+The model compares population-scale behaviour across three phenotype compositions
+under shared mechanics. The cycling phenotype experiences periodic drag switching
+driven by the circadian signal, while the non-cycling phenotype has constant drag.
+This isolates the effect of composition (all non-cycling, all cycling, or mixed)
+on spatial dynamics and cell-number trajectories under the same pairwise repulsion law.
+
+\section{Figure placeholders for simulation groups}
+The following figures are placeholders for each simulation group. For each group,
+three snapshot time points are shown (
+\(t=0\), \(t=120\), and \(t=240\)
+) together with a cell-number-over-time panel.
+
+Simulation groups:
+\begin{itemize}
+  \item All Non-Cycling,
+  \item All Cycling,
+  \item Half Non-Cycling / Half Cycling.
+\end{itemize}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[t]{0.31\textwidth}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../movies/NonCycling/image.0000.png}
+    \caption{$t=0$ days}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.31\textwidth}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../movies/NonCycling/image.0240.png}
+    \caption{$t=5$ days}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.31\textwidth}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../movies/NonCycling/image.0480.png}
+    \caption{$t=10$ days}
+  \end{subfigure}
+  \\\medskip
+  \begin{subfigure}[t]{0.72\textwidth}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../matlab/ClocksMonolayer_Cycling0_NonCycling16.png}
+    \caption{Cell number over time}
+  \end{subfigure}
+  \caption{All Non-Cycling simulation group: three snapshot timesteps and cell number over time.}
+  \label{fig:all-noncycling-placeholders}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[t]{0.31\textwidth}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../movies/Cycling/image.0000.png}
+    \caption{$t=0$ days}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.31\textwidth}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../movies/Cycling/image.0240.png}
+    \caption{$t=5$ days}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.31\textwidth}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../movies/Cycling/image.0480.png}
+    \caption{$t=10$ days}
+  \end{subfigure}
+  \\\medskip
+  \begin{subfigure}[t]{0.72\textwidth}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../matlab/ClocksMonolayer_Cycling16_NonCycling0.png}
+    \caption{Cell number over time}
+  \end{subfigure}
+  \caption{All Cycling simulation group: three snapshot timesteps and cell number over time.}
+  \label{fig:all-cycling-placeholders}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[t]{0.31\textwidth}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../movies/Mixed/image.0000.png}
+    \caption{$t=0$ days}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.31\textwidth}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../movies/Mixed/image.0240.png}
+    \caption{$t=5$ days}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.31\textwidth}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../movies/Mixed/image.0480.png}
+    \caption{$t=10$ days}
+  \end{subfigure}
+  \\\medskip
+  \begin{subfigure}[t]{0.72\textwidth}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../matlab/ClocksMonolayer_Cycling8_NonCycling8.png}
+    \caption{Cell number over time}
+  \end{subfigure}
+  \caption{Half Non-Cycling / Half Cycling simulation group: three snapshot timesteps and cell number over time.}
+  \label{fig:half-half-placeholders}
+\end{figure}
+
+\bibliographystyle{plain}
+\bibliography{TestClocksCompetition}
+
+\end{document}

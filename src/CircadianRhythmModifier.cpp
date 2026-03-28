@@ -118,24 +118,36 @@ void CircadianRhythmModifier<DIM>::UpdateCellData(AbstractCellPopulation<DIM, DI
          ++pCell)
     {
         // Switch mutation state according to thresholded circadian cycle.
-        boost::shared_ptr<AbstractCellProperty> p_new_mutation_state;
-        p_new_mutation_state = CellPropertyRegistry::Instance()->Get<WildTypeCellMutationState>();
+        // boost::shared_ptr<AbstractCellProperty> p_new_mutation_state;
+        // p_new_mutation_state = CellPropertyRegistry::Instance()->Get<WildTypeCellMutationState>();
 
         // Non-cycling cells have a frozen circadian rhythm
         if (pCell->template HasCellProperty<NonCyclingCellProperty>())
         {
             pCell->GetCellData()->SetItem("circadian_cycle", 2.0);
+            pCell->GetCellData()->SetItem("damping_coefficient", 1.0);
         }
         else
         {
             pCell->GetCellData()->SetItem("circadian_cycle", circadian_cycle);
+
+            // Map circadian_cycle in [-1, 1] to damping_coefficient in [0.1, 1.0].
+            // This is consumed by AbstractCentreBasedCellPopulation::GetDampingConstant().
+            double normalized_cycle = 0.5 * (circadian_cycle + 1.0);
+            double damping_coefficient = 0.1 + 0.9 * normalized_cycle;
+            pCell->GetCellData()->SetItem("damping_coefficient", damping_coefficient);
    
             if (circadian_cycle > mMutationThreshold)
+            {   
+                pCell->GetCellData()->SetItem("damping_coefficient", 0.1);
+                //p_new_mutation_state = CellPropertyRegistry::Instance()->Get<OscillatingCellMutationState>();
+            }
+            else
             {
-                p_new_mutation_state = CellPropertyRegistry::Instance()->Get<OscillatingCellMutationState>();
+                pCell->GetCellData()->SetItem("damping_coefficient", 10.0);
             }
         }
-        pCell->SetMutationState(p_new_mutation_state);
+        // pCell->SetMutationState(p_new_mutation_state);
     }
 }
 
