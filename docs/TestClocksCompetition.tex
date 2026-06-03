@@ -5,8 +5,10 @@
 \usepackage{graphicx}
 \usepackage{subcaption}
 \usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{tikz}
 
-\title{Simulation Description: \texttt{TestClocksCompetition}}
+\title{Competition due to the Circadian Clock: Mathematical Model Summary for \texttt{TestClocksCompetition}}
 \author{MultiCellularClocks Project}
 \date{\today}
 
@@ -16,9 +18,7 @@
 \section{Mathematical model}
 This document summarizes the mathematical model used by
 \texttt{TestClocksCompetition}. The node-based mechanical framework follows the
-overdamped centre-based formulation implemented in Chaste \cite{mirams2013chaste},
-and the logarithmic repulsive interaction is consistent with the Meineke-style
-spring law in the overlap regime \cite{meineke2001}. 
+overdamped centre-based formulation implemented in Chaste \cite{mirams2013chaste}.
 
 \subsection{State variables}
 Let \(N=16\) cells be indexed by \(i\in\{1,\dots,N\}\).
@@ -60,17 +60,8 @@ A pairwise force is applied only in overlap (repulsion) regime \(d_{ij}<\ell_{ij
 where \(p>0\) is the \texttt{RepulsionParameter} (set to \(1.0\) in this test).
 Equation~\eqref{eq:pair_force} is evaluated using the geometric quantities from
 Eq.~\eqref{eq:pair_kinematics}.
-
-The cell-interaction force contribution is drag-weighted asymmetrically:
-\begin{align}
-\mathbf{f}_{i\leftarrow j} &= \frac{1}{\gamma_i}\mathbf{F}_{ij},\\
-\mathbf{f}_{j\leftarrow i} &= -\frac{1}{\gamma_j}\mathbf{F}_{ij}.
-\label{eq:drag_weighted_pair_forces}
-\end{align}
 This force-based centre model is discussed in detail in
 \cite{osborne2017comparing}.
-
-Thus higher drag reduces the applied mechanical contribution.
 
 \subsection{Circadian signal and drag law}
 A global circadian signal is defined by
@@ -115,16 +106,14 @@ cell-cycle parameters are held fixed.
 \subsection{Equation of motion (overdamped node dynamics)}
 For each node \(i\), the net applied force is
 \begin{equation}
-\mathbf{F}^{\text{net}}_i(t)=\sum_{j\in\mathcal{N}(i)}\mathbf{f}_{i\leftarrow j},
+\mathbf{F}^{\text{net}}_i(t)=\sum_{j\in\mathcal{N}(i)}\mathbf{F}_{ij},
 \label{eq:net_force}
 \end{equation}
 where \(\mathcal{N}(i)\) is the interaction-neighbour set from the node-based mesh.
-By construction, Eq.~\eqref{eq:net_force} aggregates pair terms from
-Eq.~\eqref{eq:drag_weighted_pair_forces}.
 
 In overdamped form, velocity is proportional to net force,
 \begin{equation}
-\dot{\mathbf{x}}_i(t) \propto \mathbf{F}^{\text{net}}_i(t),
+\gamma_i \dot{\mathbf{x}}_i(t) = \mathbf{F}^{\text{net}}_i(t),
 \label{eq:overdamped_update}
 \end{equation}
 and the simulation integrates with time step \(\Delta t=0.01\) to final time
@@ -172,18 +161,23 @@ driven by the circadian signal, while the non-cycling phenotype has constant dra
 This isolates the effect of composition (all non-cycling, all cycling, or mixed)
 on spatial dynamics and cell-number trajectories under the same pairwise repulsion law.
 
-\section{Figure placeholders for simulation groups}
-The following figures are placeholders for each simulation group. For each group,
-three snapshot time points are shown (
-\(t=0\), \(t=120\), and \(t=240\)
-) together with a cell-number-over-time panel.
+\section{Results}
+Figures~\ref{fig:all-noncycling-results}--\ref{fig:half-half-results} show representative
+spatial snapshots at \(t=0\), \(t=120\), and \(t=240\), together with the corresponding
+mean cell-count trajectories (across 10 replicates) for each composition.
 
-Simulation groups:
+Simulation groups considered are:
 \begin{itemize}
   \item All Non-Cycling,
   \item All Cycling,
   \item Half Non-Cycling / Half Cycling.
 \end{itemize}
+
+Overall, all groups exhibit population growth over the simulated window, while the
+relative proportions of cycling and non-cycling cells influence the trajectory shape.
+The all non-cycling and all cycling cases provide the two homogeneous reference
+behaviours, and the mixed group generally lies between these extremes, consistent
+with composition-dependent competition under shared mechanics.
 
 \begin{figure}[htbp]
   \centering
@@ -204,14 +198,19 @@ Simulation groups:
     \includegraphics[width=0.95\linewidth]{../movies/NonCycling/image.0480.png}
     \caption{$t=10$ days}
   \end{subfigure}
-  \\\medskip
+  \\
+  \begin{tikzpicture}
+    \draw[fill=red!60,draw=red!80] (0,0) circle (0.18cm);
+    \node[right] at (0.25,0) {Non-cycling cell};
+  \end{tikzpicture}
+  \\
   \begin{subfigure}[t]{0.72\textwidth}
     \centering
     \includegraphics[width=0.95\linewidth]{../matlab/ClocksMonolayer_Cycling0_NonCycling16.png}
     \caption{Cell number over time}
   \end{subfigure}
-  \caption{All Non-Cycling simulation group: three snapshot timesteps and cell number over time.}
-  \label{fig:all-noncycling-placeholders}
+  \caption{All Non-Cycling simulation group: snapshots and mean cell counts over time.}
+  \label{fig:all-noncycling-results}
 \end{figure}
 
 \begin{figure}[htbp]
@@ -233,14 +232,19 @@ Simulation groups:
     \includegraphics[width=0.95\linewidth]{../movies/Cycling/image.0480.png}
     \caption{$t=10$ days}
   \end{subfigure}
-  \\\medskip
+  \\
+   \begin{tikzpicture}
+    \draw[fill=blue!60,draw=blue!80] (0,0) circle (0.18cm);
+    \node[right] at (0.25,0) {Cycling cell};
+  \end{tikzpicture}
+  \\
   \begin{subfigure}[t]{0.72\textwidth}
     \centering
     \includegraphics[width=0.95\linewidth]{../matlab/ClocksMonolayer_Cycling16_NonCycling0.png}
     \caption{Cell number over time}
   \end{subfigure}
-  \caption{All Cycling simulation group: three snapshot timesteps and cell number over time.}
-  \label{fig:all-cycling-placeholders}
+  \caption{All Cycling simulation group: snapshots and mean cell counts over time. Cell colour indicates drag phase.}
+  \label{fig:all-cycling-results}
 \end{figure}
 
 \begin{figure}[htbp]
@@ -262,14 +266,116 @@ Simulation groups:
     \includegraphics[width=0.95\linewidth]{../movies/Mixed/image.0480.png}
     \caption{$t=10$ days}
   \end{subfigure}
-  \\\medskip
+  \\
+  \begin{tikzpicture}
+    \draw[fill=red!60,draw=red!80] (0,0) circle (0.18cm);
+    \node[right] at (0.25,0) {Non-cycling cell};
+    \draw[fill=blue!60,draw=blue!80] (4.5,0) circle (0.18cm);
+    \node[right] at (4.75,0) {Cycling cell};
+  \end{tikzpicture}
+  \\
   \begin{subfigure}[t]{0.72\textwidth}
     \centering
     \includegraphics[width=0.95\linewidth]{../matlab/ClocksMonolayer_Cycling8_NonCycling8.png}
     \caption{Cell number over time}
   \end{subfigure}
-  \caption{Half Non-Cycling / Half Cycling simulation group: three snapshot timesteps and cell number over time.}
-  \label{fig:half-half-placeholders}
+  \caption{Half Non-Cycling / Half Cycling simulation group: snapshots and mean cell counts over time. Cell colour indicates phenotype and drag phase.}
+  \label{fig:half-half-results}
+\end{figure}
+
+These results support the model interpretation that periodic drag modulation in
+cycling cells alters collective dynamics compared with constant-drag non-cycling
+cells, and that mixed populations interpolate between homogeneous limits.
+
+\begin{figure}[p]
+  \raggedright%
+  \begin{minipage}[c]{0.88\textwidth}
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0432.png}
+      \caption{$t=0$ h}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0436.png}
+      \caption{$t=2$ h}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0440.png}
+      \caption{$t=4$ h}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0444.png}
+      \caption{$t=6$ h}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0448.png}
+      \caption{$t=8$ h}
+    \end{subfigure}
+
+    \medskip
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0452.png}
+      \caption{$t=10$ h}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0456.png}
+      \caption{$t=12$ h}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0460.png}
+      \caption{$t=14$ h}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0464.png}
+      \caption{$t=16$ h}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0468.png}
+      \caption{$t=18$ h}
+    \end{subfigure}
+
+    \medskip
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0472.png}
+      \caption{$t=20$ h}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0476.png}
+      \caption{$t=22$ h}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.19\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,trim=100 80 100 80,clip]{../movies/CyclingClock/image.0480.png}
+      \caption{$t=24$ h}
+    \end{subfigure}
+  \end{minipage}%
+  \hfill
+  \begin{minipage}[c]{0.10\textwidth}
+    \centering
+    \includegraphics[width=\linewidth,trim=0 0 68 0,clip]{../movies/CyclingClock/legend.png}
+  \end{minipage}
+  \caption{All-cycling simulation snapshots over a 24-hour window at 2-hour intervals. Cell Color represents the position in the circadian cycle.}\label{fig:cycling-24h-2hourly}
 \end{figure}
 
 \bibliographystyle{plain}

@@ -1,46 +1,46 @@
-This is BibTeX, Version 0.99d (TeX Live 2022/dev/Debian)
+This is BibTeX, Version 0.99d (TeX Live 2022)
 Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
 The top-level auxiliary file: TestClocksCompetition.aux
 The style file: plain.bst
 Database file #1: TestClocksCompetition.bib
-You've used 4 entries,
+You've used 3 entries,
             2118 wiz_defined-function locations,
-            522 strings with 4969 characters,
-and the built_in function-call counts, 1897 in all, are:
-= -- 169
-> -- 141
+            515 strings with 4795 characters,
+and the built_in function-call counts, 1533 in all, are:
+= -- 132
+> -- 123
 < -- 0
-+ -- 56
-- -- 52
-* -- 181
-:= -- 337
-add.period$ -- 12
-call.type$ -- 4
-change.case$ -- 38
++ -- 49
+- -- 46
+* -- 150
+:= -- 276
+add.period$ -- 9
+call.type$ -- 3
+change.case$ -- 32
 chr.to.int$ -- 0
-cite$ -- 4
-duplicate$ -- 44
-empty$ -- 111
-format.name$ -- 52
-if$ -- 361
+cite$ -- 3
+duplicate$ -- 33
+empty$ -- 84
+format.name$ -- 46
+if$ -- 288
 int.to.chr$ -- 0
-int.to.str$ -- 4
-missing$ -- 4
-newline$ -- 23
-num.names$ -- 8
-pop$ -- 30
+int.to.str$ -- 3
+missing$ -- 3
+newline$ -- 18
+num.names$ -- 6
+pop$ -- 26
 preamble$ -- 1
-purify$ -- 34
+purify$ -- 29
 quote$ -- 0
-skip$ -- 28
+skip$ -- 21
 stack$ -- 0
-substring$ -- 118
-swap$ -- 4
+substring$ -- 88
+swap$ -- 3
 text.length$ -- 0
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 16
+type$ -- 12
 warning$ -- 0
-while$ -- 14
-width$ -- 5
-write$ -- 46
+while$ -- 10
+width$ -- 4
+write$ -- 35
